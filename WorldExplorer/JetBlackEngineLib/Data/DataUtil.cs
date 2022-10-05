@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace JetBlackEngineLib.Data;
@@ -37,10 +38,26 @@ public static class DataUtil
     {
         return BitConverter.ToInt32(data.Slice(offset, 4).ToArray());
     }
+    
+    public static uint GetLeUInt(ReadOnlySpan<byte> data, int offset)
+    {
+        return BitConverter.ToUInt32(data.Slice(offset, 4).ToArray());
+    }
 
     public static int GetLeInt(byte[] data, int offset)
     {
         return BitConverter.ToInt32(data, offset);
+    }
+
+    public static T CastTo<T>(ReadOnlySpan<byte> data) where T : struct
+    {
+        var span = MemoryMarshal.Cast<byte, T>(data);
+        return span[0];
+    }
+    
+    public static T CastTo<T>(ReadOnlySpan<byte> data, int offset) where T : struct
+    {
+        return CastTo<T>(data.Slice(offset));
     }
 
     public static short GetLeShort(ReadOnlySpan<byte> data, int offset)

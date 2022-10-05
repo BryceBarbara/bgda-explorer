@@ -31,23 +31,101 @@ public class TexDecoder
     private const int PSMCT32 = 0x00;
     private const int PSMT4 = 0x14;
 
+    [Serializable]
+    [StructLayout(LayoutKind.Sequential, Pack=1)]
+    private struct TexHeader
+    {
+        public ushort Width;
+        public ushort Height;
+        public ushort U1;
+        public ushort Length;
+        public int U2;
+        public int U3;
+        public int GifOffset;
+    }
+
     public static WriteableBitmap? Decode(ReadOnlySpan<byte> data)
     {
+        var header = DataUtil.CastTo<TexHeader>(data);
+
+        if (header.Width <= 0)
+        {
+            return null;
+        }
+
+        if (header.GifOffset <= 0)
+        {
+            // PC version of stuff
+            return Read8BitPaletteTexture(data, header);
+        } 
+        
+        return ReadGifTexture(data, header);
+    }
+
+    private static Color ToColorFromAbgr(int argb)
+    {
+        var a = (byte)((argb & -16777216) >> 0x18);
+        var r = (byte)(argb & 0xff);
+        var g = (byte)((argb & 0xff00) >> 8);
+        var b = (byte)((argb & 0xff0000) >> 0x10);
+        return Color.FromArgb(a, r, g, b);
+    }
+
+    private static WriteableBitmap Read8BitPaletteTexture(ReadOnlySpan<byte> data, TexHeader header)
+    {
+        var PaletteLength = 256;
+        var paletteColors = new List<Color>(PaletteLength);
+
+        var paletteOffset = header.U2;
+
+        for (var i = 0; i < PaletteLength; i++)
+        {
+            var argb = DataUtil.GetLeInt(data, paletteOffset + (i * 4));
+            paletteColors.Add(ToColorFromAbgr(argb));
+        }
+        
+        var palette = new BitmapPalette(paletteColors);
+        
+        var image = new WriteableBitmap(
+            header.Width, header.Height,
+            96, 96,
+            PixelFormats.Indexed8,
+            palette);
+        
+        image.Lock();
+        var imageDataOffset = paletteOffset + PaletteLength * 4;
+        var stride = header.Width;
+        for (var y = 0; y < header.Height && y < header.Height; ++y)
+        for (var x = 0; x < header.Width && x < header.Width; ++x)
+        {
+            var pixel = data[imageDataOffset + ((y * stride) + x)];
+            if (x < header.Width && y < header.Height)
+            {
+                var p = image.BackBuffer + (y * image.BackBufferStride) + (x);
+                Marshal.WriteByte(p, pixel);
+            }
+        }
+        
+        // Specify the area of the bitmap that changed.
+        image.AddDirtyRect(new Int32Rect(0, 0, header.Width, header.Height));
+
+        // Release the back buffer and make it available for display.
+        image.Unlock();
+
+        return image;
+    } 
+
+    private static WriteableBitmap ReadGifTexture(ReadOnlySpan<byte> data, TexHeader header)
+    {
         GsMemory gsMem = new();
-
-        var length = DataUtil.GetLeShort(data, 6) * 16;
-
-        int finalW = BitConverter.ToInt16(data[..2].ToArray());
-        int finalH = BitConverter.ToInt16(data.Slice(2, 2).ToArray());
-        var offsetToGIF = DataUtil.GetLeInt(data, 16);
-
-        var sourceW = finalW;
-        var sourceH = finalH;
+        
+        var sourceW = header.Width;
+        var sourceH = header.Height;
         PalEntry[]? pixels = null;
         byte[]? bytes = null;
 
-        var curIdx = offsetToGIF;
-        var endIndex = curIdx + length;
+        var curIdx = header.GifOffset;
+        var endIndex = curIdx + header.Length;
 
         GIFTag gifTag = new();
         gifTag.Parse(data[curIdx..]);
@@ -69,8 +147,8 @@ public class TexDecoder
             palette = PalEntry.UnswizzlePalette(palette);
 
             curIdx += gifTag2.Length;
-            var destWBytes = (finalW + 0x0f) & ~0x0f;
-            var destHBytes = (finalH + 0x0f) & ~0x0f;
+            var destWBytes = (ushort)((header.Width + 0x0f) & ~0x0f);
+            var destHBytes = (ushort)((header.Height + 0x0f) & ~0x0f);
 
             var dpsm = PSMCT32;
             var dbw = 0;
@@ -158,7 +236,7 @@ public class TexDecoder
 
                         gsMem.WriteTexPSMCT32(dbp, dbw, startX, startY, rrw, rrh, imageData, imageDataIdx);
 
-                        destWBytes = (finalW + 0x3f) & ~0x3f;
+                        destWBytes = (ushort)((header.Width + 0x3f) & ~0x3f);
                         bytes = gsMem.ReadTexPSMT4(dbp, destWBytes / 0x40, startX, startY, destWBytes, destHBytes);
                         bytes = Expand4Bit(bytes);
                     }
@@ -180,17 +258,17 @@ public class TexDecoder
 
             if (palette.Length == 256)
             {
-                destWBytes = (finalW + 0x7f) & ~0x7f;
+                destWBytes = (ushort)((header.Width + 0x7f) & ~0x7f);
                 dbw = destWBytes / 0x40;
-                bytes = gsMem.ReadTexPSMT8(dbp, dbw, 0, 0, destWBytes, finalH);
+                bytes = gsMem.ReadTexPSMT8(dbp, dbw, 0, 0, destWBytes, header.Height);
             }
 
             // THIS IS A HACK
             if (palette.Length == 1024)
             {
-                destWBytes = (finalW + 0x3f) & ~0x3f;
+                destWBytes = (ushort)((header.Width + 0x3f) & ~0x3f);
                 dbw = destWBytes / 0x40;
-                bytes = gsMem.ReadTexPSMT8(dbp, dbw, 0, 0, destWBytes, finalH);
+                bytes = gsMem.ReadTexPSMT8(dbp, dbw, 0, 0, destWBytes, header.Height);
             }
 
             if (bytes != null)
@@ -209,17 +287,12 @@ public class TexDecoder
             if (gifTag2.flg == 2)
                 // image mode
             {
-                pixels = ReadPixels32(data[0xD0..], finalW, finalH);
+                pixels = ReadPixels32(data[0xD0..], header.Width, header.Height);
             }
-        }
-            
-        if (finalW <= 0)
-        {
-            return null;
         }
 
         var image = new WriteableBitmap(
-            finalW, finalH,
+            header.Width, header.Height,
             96, 96,
             PixelFormats.Bgr32,
             null);
@@ -227,11 +300,11 @@ public class TexDecoder
         if (pixels != null)
         {
             var pBackBuffer = image.BackBuffer;
-            for (var y = 0; y < sourceH && y < finalH; ++y)
-            for (var x = 0; x < sourceW && x < finalW; ++x)
+            for (var y = 0; y < sourceH && y < header.Height; ++y)
+            for (var x = 0; x < sourceW && x < header.Width; ++x)
             {
                 var pixel = pixels[(y * sourceW) + x];
-                if (x < finalW && y < finalH)
+                if (x < header.Width && y < header.Height)
                 {
                     var p = pBackBuffer + (y * image.BackBufferStride) + (x * 4);
                     Marshal.WriteInt32(p, pixel.Argb());
@@ -240,7 +313,7 @@ public class TexDecoder
         }
 
         // Specify the area of the bitmap that changed.
-        image.AddDirtyRect(new Int32Rect(0, 0, finalW, finalH));
+        image.AddDirtyRect(new Int32Rect(0, 0, header.Width, header.Height));
 
         // Release the back buffer and make it available for display.
         image.Unlock();
