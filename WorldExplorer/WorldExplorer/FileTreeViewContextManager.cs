@@ -12,6 +12,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using WorldExplorer.DataExporters;
 using WorldExplorer.Logging;
 using WorldExplorer.TreeView;
@@ -20,9 +21,16 @@ namespace WorldExplorer;
 
 internal class FileTreeViewContextManager
 {
+    private static readonly HashSet<string> SupportedExtensionsToSaveParsedData = new()
+    {
+        ".VIF",
+        ".FNT",
+        ".TEX",
+    };
+    
     private readonly MenuItem _logTexData;
     private readonly ContextMenu _menu = new();
-    private readonly MenuItem _saveParsedVifData;
+    private readonly MenuItem _saveParsedDataMenuItem;
 
     // Menu Items
     private readonly MenuItem _saveRawData;
@@ -40,7 +48,7 @@ internal class FileTreeViewContextManager
 
         // Setup Menu
         _saveRawData = AddItem("Save Raw Data", SaveRawDataClicked);
-        _saveParsedVifData = AddItem("Save Parsed Data", SaveParsedDataClicked);
+        _saveParsedDataMenuItem = AddItem("Save Parsed Data", SaveParsedDataClicked);
         _logTexData = AddItem("Log .TEX Data", LogTexDataClicked);
     }
 
@@ -58,7 +66,7 @@ internal class FileTreeViewContextManager
 
         // Set default menu item visibility
         _saveRawData.Visibility = Visibility.Visible;
-        _saveParsedVifData.Visibility = Visibility.Collapsed;
+        _saveParsedDataMenuItem.Visibility = Visibility.Collapsed;
         _logTexData.Visibility = Visibility.Collapsed;
 
         switch (dataContext)
@@ -66,9 +74,9 @@ internal class FileTreeViewContextManager
             // files in .lmp files
             case LmpEntryTreeViewModel lmpEntryItem:
             {
-                if (Path.GetExtension(lmpEntryItem.Label).ToUpperInvariant() == ".VIF")
+                if (SupportedExtensionsToSaveParsedData.Contains(Path.GetExtension(lmpEntryItem.Label).ToUpperInvariant()))
                 {
-                    _saveParsedVifData.Visibility = Visibility.Visible;
+                    _saveParsedDataMenuItem.Visibility = Visibility.Visible;
                 }
                 _menu.DataContext = lmpEntryItem;
                 break;
@@ -87,7 +95,7 @@ internal class FileTreeViewContextManager
             {
                 var worldElement = model;
                 _saveRawData.Visibility = Visibility.Collapsed;
-                _saveParsedVifData.Visibility = Visibility.Visible;
+                _saveParsedDataMenuItem.Visibility = Visibility.Visible;
                 _menu.DataContext = worldElement;
                 break;
             }
@@ -173,26 +181,20 @@ internal class FileTreeViewContextManager
                 var lmpFile = lmpEntry.LmpFileProperty;
                 var entry = lmpFile.Directory[lmpEntry.Label];
 
-                if (Path.GetExtension(lmpEntry.Label).ToLower() != ".vif")
+                var fileExt = Path.GetExtension(lmpEntry.Label).ToUpperInvariant();
+
+                switch (fileExt)
                 {
-                    MessageBox.Show("Not a .vif file!", "Error");
-                    return;
+                    case ".VIF":
+                        SaveParsedVifFileDataClicked(lmpEntry, lmpFile, entry);
+                        break;
+                    case ".FNT":
+                        SaveParsedFntFileDataClicked(lmpEntry, lmpFile, entry);
+                        break;
+                    default:
+                        MessageBox.Show($"Cannot save parsed data of {fileExt} files!", "Error");
+                        return;
                 }
-                    
-                var fileName = lmpEntry.Label + ".txt";
-                PromptToSaveVifData(fileName, () =>
-                {
-                    var texEntry =
-                        lmpFile.Directory[Path.GetFileNameWithoutExtension(lmpEntry.Label) + ".tex"];
-                    var texData = lmpFile.FileData.AsSpan().Slice(texEntry.StartOffset, texEntry.Length);
-                    var tex = TexDecoder.Decode(texData);
-                    var vifData = lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length);
-                    return VifDecoder.DecodeChunks(
-                        NullLogger.Instance,
-                        vifData,
-                        tex?.PixelWidth ?? 0,
-                        tex?.PixelHeight ?? 0);
-                });
                 break;
             }
             case WorldElementTreeViewModel itemModel:
@@ -215,7 +217,55 @@ internal class FileTreeViewContextManager
             }
         }
     }
-        
+    
+    private void SaveParsedFntFileDataClicked(LmpEntryTreeViewModel lmpEntry, LmpFile lmpFile, LmpFile.EntryInfo entry)
+    {
+        // Currently we just export the texture from the font. None of the character data has been figured out
+        // so that's all we can do for now.
+        var fileName = Path.GetFileNameWithoutExtension(lmpEntry.Label) + ".png";
+        PromptToSaveData(fileName, (saveFilePath) =>
+        {
+            try
+            {
+                var fnt = FntDecoder.Decode(lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length));
+                using FileStream stream = new(saveFilePath, FileMode.Create);
+                
+                var encoder = new PngBitmapEncoder();
+                encoder.Interlace = PngInterlaceOption.On;
+                encoder.Frames.Add(BitmapFrame.Create(fnt.Texture));
+                encoder.Save(stream);
+                stream.Flush();
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    "An error occurred while saving the file.\r\n\r\nDetails: " + exception.Message,
+                    "Error Saving Fnt File",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
+        });
+    }
+
+    private void SaveParsedVifFileDataClicked(LmpEntryTreeViewModel lmpEntry, LmpFile lmpFile, LmpFile.EntryInfo entry)
+    {
+        var fileName = lmpEntry.Label + ".txt";
+        PromptToSaveVifData(fileName, () =>
+        {
+            var texEntry =
+                lmpFile.Directory[Path.GetFileNameWithoutExtension(lmpEntry.Label) + ".tex"];
+            var texData = lmpFile.FileData.AsSpan().Slice(texEntry.StartOffset, texEntry.Length);
+            var tex = TexDecoder.Decode(texData);
+            var vifData = lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length);
+            return VifDecoder.DecodeChunks(
+                NullLogger.Instance,
+                vifData,
+                tex?.PixelWidth ?? 0,
+                tex?.PixelHeight ?? 0);
+        });
+    }
+
     private void PromptToSaveData(string fileName, Action<string> saveFunc)
     {
         SaveFileDialog dialog = new() { FileName = fileName };
