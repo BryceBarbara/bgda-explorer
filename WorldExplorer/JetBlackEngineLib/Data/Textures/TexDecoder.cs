@@ -15,6 +15,7 @@
 */
 
 using JetBlackEngineLib.Data.Models;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
@@ -22,7 +23,7 @@ using System.Windows.Media.Imaging;
 
 namespace JetBlackEngineLib.Data.Textures;
 
-public class TexDecoder
+public static class TexDecoder
 {
     private const int BITBLTBUF = 0x50;
     private const int TRXPOS = 0x51;
@@ -57,7 +58,10 @@ public class TexDecoder
         {
             // PC version of stuff
             return Read8BitPaletteTexture(data, header);
-        } 
+        }
+
+        if (header.GifOffset >= data.Length)
+            throw new InvalidDataException("Offset is past the end of the data");
         
         return ReadGifTexture(data, header);
     }

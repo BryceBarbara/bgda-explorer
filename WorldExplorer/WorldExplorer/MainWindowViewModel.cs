@@ -28,6 +28,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
+using System.Windows;
 using System.Windows.Media.Imaging;
 using WorldExplorer.Logging;
 using WorldExplorer.TreeView;
@@ -55,7 +56,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     // This is what the tree view binds to.
     public ReadOnlyCollection<WorldTreeViewModel> Children =>
-        new ReadOnlyCollection<WorldTreeViewModel>(_worldTreeViewModel != null
+        new(_worldTreeViewModel != null
             ? new[] {_worldTreeViewModel}
             : Array.Empty<WorldTreeViewModel>());
 
@@ -192,6 +193,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         switch (ext)
         {
+            case ".fnt":
+            {
+                var selectedFont = FntDecoder.Decode(lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length));
+                SelectedNodeImage = selectedFont.Texture;
+
+                MainWindow.tabControl.SelectedIndex = 0; // Texture View
+            }
+                break;
             case ".tex":
             {
                 SelectedNodeImage =
@@ -209,11 +218,25 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 StringLogger log = new();
                 _modelViewModel.Texture = SelectedNodeImage;
                 _modelViewModel.AnimData = null;
-                Model model = new(VifDecoder.Decode(
-                    log,
-                    lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length),
-                    SelectedNodeImage?.PixelWidth ?? 0,
-                    SelectedNodeImage?.PixelHeight ?? 0));
+                Model? model = null;
+                try
+                {
+                    model = new(VifDecoder.Decode(
+                        log,
+                        lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length),
+                        SelectedNodeImage?.PixelWidth ?? 0,
+                        SelectedNodeImage?.PixelHeight ?? 0));
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show(MainWindow,
+                        "There was an error parsing the model.\r\n\r\nDetails: " + e.Message,
+                        "Error Loading Model",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
+                }
+
                 _modelViewModel.VifModel = model;
 
                 /*// Load animation data
@@ -372,12 +395,27 @@ public class MainWindowViewModel : INotifyPropertyChanged
         StringLogger log = new();
         _modelViewModel.Texture = SelectedNodeImage;
         _modelViewModel.AnimData = null;
-        Model model = new(VifDecoder.Decode(
-            log,
-            childEntry.YakFile.FileData.AsSpan()
-                .Slice(childEntry.Value.VifOffset, childEntry.Value.TextureOffset),
-            SelectedNodeImage?.PixelWidth ?? 0,
-            SelectedNodeImage?.PixelHeight ?? 0));
+
+        Model? model = null;
+        try
+        {
+            model = new(VifDecoder.Decode(
+                log,
+                childEntry.YakFile.FileData.AsSpan()
+                    .Slice(childEntry.Value.VifOffset, childEntry.Value.TextureOffset),
+                SelectedNodeImage?.PixelWidth ?? 0,
+                SelectedNodeImage?.PixelHeight ?? 0));
+        }
+        catch (Exception e)
+        {
+            MessageBox.Show(MainWindow,
+                "There was an error parsing the model.\r\n\r\nDetails: " + e.Message,
+                "Error Loading Model",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error
+            );
+        }
+
         _modelViewModel.VifModel = model;
 
         LogText += log.ToString();
