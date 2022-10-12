@@ -1,7 +1,6 @@
 ﻿using JetBlackEngineLib.Data.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 
 namespace JetBlackEngineLib.Data.World;
@@ -16,9 +15,8 @@ public abstract class WorldFileDecoder : ISupportsSpecificEngineVersions
     {
         _modelCache.Clear();
         WorldData worldData = new();
-            
-        var headerSpan = MemoryMarshal.Cast<byte, WorldFileHeader>(data);
-        var header = headerSpan[0];
+
+        var header = DataUtil.CastTo<WorldFileHeader>(data);
         var texX0 = header.Texll % 100;
         var texY0 = header.Texll / 100;
         var texX1 = header.Texur % 100;
@@ -50,10 +48,7 @@ public abstract class WorldFileDecoder : ISupportsSpecificEngineVersions
         List<WorldElement> elements = new(header.NumberOfElements);
         for (var elementIdx = 0; elementIdx < header.NumberOfElements; ++elementIdx)
         {
-            var rawElSpan = MemoryMarshal.Cast<byte, T>(
-                data.Slice(header.ElementArrayStart + (elementSize * elementIdx), elementSize)
-            );
-            var rawEl = rawElSpan[0];
+            var rawEl = DataUtil.CastTo<T>(data.Slice(header.ElementArrayStart + (elementSize * elementIdx), elementSize));
             var element = elementParseFunc(rawEl, elementIdx);
             if (element == null) continue;
             elements.Add(element);
