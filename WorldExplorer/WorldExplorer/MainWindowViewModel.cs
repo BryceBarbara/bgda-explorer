@@ -189,11 +189,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
         var lmpFile = lmpEntry.LmpFileProperty;
         var entry = lmpFile.Directory[lmpEntry.Label];
 
-        var ext = (Path.GetExtension(lmpEntry.Label) ?? "").ToLower();
+        var ext = (Path.GetExtension(lmpEntry.Label) ?? "").ToUpperInvariant();
 
         switch (ext)
         {
-            case ".fnt":
+            case ".FNT":
             {
                 var selectedFont = FntDecoder.Decode(lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length));
                 SelectedNodeImage = selectedFont.Texture;
@@ -201,7 +201,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 MainWindow.tabControl.SelectedIndex = 0; // Texture View
             }
                 break;
-            case ".tex":
+            case ".TEX":
             {
                 SelectedNodeImage =
                     TexDecoder.Decode(lmpFile.FileData.AsSpan().Slice(entry.StartOffset, entry.Length));
@@ -209,7 +209,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 MainWindow.tabControl.SelectedIndex = 0; // Texture View
             }
                 break;
-            case ".vif":
+            case ".VIF":
             {
                 var texFilename = Path.GetFileNameWithoutExtension(lmpEntry.Label) + ".tex";
                 var texEntry = lmpFile.Directory[texFilename];
@@ -252,7 +252,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 MainWindow.SetViewportText(1, lmpEntry.Label, "");
             }
                 break;
-            case ".anm":
+            case ".ANM":
             {
                 var engineVersion =
                     App.Settings.Get("Core.EngineVersion", EngineVersion.DarkAlliance);
@@ -293,7 +293,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 MainWindow.SetViewportText(2, lmpEntry.Label, ""); // Set Skeleton View Text
 
                 break;
-            case ".ob":
+            case ".OB":
             {
                 var objects = ObDecoder.Decode(lmpFile.FileData, entry.StartOffset, entry.Length);
 
@@ -301,15 +301,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
                 foreach (var obj in objects)
                 {
-                    sb.AppendFormat("Name: {0}\n", obj.Name);
-                    sb.AppendFormat("I6: {0}\n", obj.I6.ToString("X4"));
-                    sb.AppendFormat("Floats: {0},{1},{2}\n", obj.Floats[0], obj.Floats[1], obj.Floats[2]);
+                    sb.Append($"Name: {obj.Name}\n");
+                    sb.Append($"I6: {obj.I6.ToString("X4")}\n");
+                    sb.Append($"Floats: {obj.Floats[0]},{obj.Floats[1]},{obj.Floats[2]}\n");
                     foreach (var prop in obj.Properties)
                     {
-                        sb.AppendFormat("Property: {0}\n", prop);
+                        sb.Append($"Property: {prop}\n");
                     }
 
-                    sb.Append("\n");
+                    sb.Append('\n');
                 }
 
                 LogText = sb.ToString();
@@ -317,19 +317,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 MainWindow.tabControl.SelectedIndex = 4; // Log View
 
                 break;
-            case ".scr":
+            case ".SCR":
                 var script = ScrDecoder.Decode(lmpFile.FileData, entry.StartOffset, entry.Length);
                 LogText = script.Disassemble();
                 MainWindow.tabControl.SelectedIndex = 4; // Log View
 
                 break;
-            case ".cut":
+            case ".CUT":
                 var scene = CutDecoder.Decode(lmpFile.FileData, entry.StartOffset, entry.Length);
                 LogText = scene.Disassemble();
                 MainWindow.tabControl.SelectedIndex = 4; // Log View
 
                 break;
-            case ".bin":
+            case ".BIN":
             {
                 var dialog =
                     DialogDecoder.Decode(lmpFile.FileData, entry.StartOffset, entry.Length);
@@ -337,10 +337,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
                 foreach (var obj in dialog)
                 {
-                    sb.AppendFormat("Name: {0}\n", obj.Name);
-                    sb.AppendFormat("Start offset in VA File: 0x{0:x}\n", obj.StartOffsetInVAFile);
-                    sb.AppendFormat("Length: 0x{0:x}\n", obj.Length);
-                    sb.Append("\n");
+                    sb.Append($"Name: {obj.Name}\n");
+                    sb.Append($"Start offset in VA File: 0x{obj.StartOffsetInVAFile:x}\n");
+                    sb.Append($"Length: 0x{obj.Length:x}\n");
+                    sb.Append('\n');
                 }
 
                 LogText = sb.ToString();
