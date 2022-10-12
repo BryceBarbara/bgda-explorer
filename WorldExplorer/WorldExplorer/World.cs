@@ -47,11 +47,11 @@ public class World
 
     public void Load()
     {
-        var ext = (Path.GetExtension(Name) ?? "").ToLower();
+        var ext = (Path.GetExtension(Name) ?? "").ToUpperInvariant();
 
         switch (ext)
         {
-            case ".gob":
+            case ".GOB":
                 var texFileName = Path.GetFileNameWithoutExtension(Name) + ".tex";
                 var textFilePath = Path.Combine(DataPath, texFileName);
                 WorldGob = new GobFile(EngineVersion, Path.Combine(DataPath, Name));
@@ -65,16 +65,16 @@ public class World
                 }
 
                 break;
-            case ".lmp":
+            case ".LMP":
                 // TODO: Support just passing the filepath instead of having to load data here
                 var data = File.ReadAllBytes(Path.Combine(DataPath, Name));
                 WorldLmp = new LmpFile(EngineVersion, Name, data, 0, data.Length);
                 break;
-            case ".yak":
+            case ".YAK":
                 var yakData = File.ReadAllBytes(Path.Combine(DataPath, Name));
                 WorldYak = new YakFile(EngineVersion, Name, yakData);
                 break;
-            case ".hdr":
+            case ".HDR":
                 var baseName = Name[..^4];
                 var hdrData = File.ReadAllBytes(Path.Combine(DataPath, Name));
                 var datData = File.ReadAllBytes(Path.Combine(DataPath, baseName + ".DAT"));

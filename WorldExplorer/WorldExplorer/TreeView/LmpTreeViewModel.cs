@@ -38,7 +38,7 @@ public class LmpTreeViewModel : AbstractLmpTreeViewModel
             var ext = "";
             try
             {
-                ext = (Path.GetExtension(entry.Key) ?? "").ToLower();
+                ext = (Path.GetExtension(entry.Key) ?? "").ToUpperInvariant();
             }
             catch (Exception e)
             {
@@ -49,7 +49,7 @@ public class LmpTreeViewModel : AbstractLmpTreeViewModel
             TreeViewItemViewModel child;
             switch (ext)
             {
-                case ".world":
+                case ".WORLD":
                     child = new WorldFileTreeViewModel(_world, this, _lmpFile, entry.Key);
                     break;
                 default:
