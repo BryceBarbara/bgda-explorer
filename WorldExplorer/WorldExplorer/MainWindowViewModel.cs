@@ -364,12 +364,26 @@ public class MainWindowViewModel : INotifyPropertyChanged
             
         if (World == null) return;
 
-        World.WorldData = decoder.Decode(lmpFile.FileData.AsSpan(entry.StartOffset, entry.Length), _worldTreeViewModel?.World.WorldTex);
+        try
+        {
+            World.WorldData = decoder.Decode(lmpFile.FileData.AsSpan(entry.StartOffset, entry.Length),
+                _worldTreeViewModel?.World.WorldTex);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(MainWindow,
+                "There was an decoding the world data.\r\n\r\nDetails: " + exception.Message,
+                "Error Decoding World Data",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error
+            );
+        }
+
         worldFileModel.ReloadChildren();
         _levelViewModel.WorldNode = worldFileModel;
         _levelViewModel.WorldData = World.WorldData;
         LogText = log.ToString();
-        LogText += World.WorldData.ToString();
+        LogText += World.WorldData?.ToString();
 
         MainWindow.tabControl.SelectedIndex = 3; // Level View
         MainWindow.ResetCamera();
